@@ -1,9 +1,9 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Users\\redst\\source\\repos\\PS2ELFParser\\",
+  "WorkspaceRootPath": "C:\\Users\\redst\\source\\repos\\ELFParser\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{1869985C-2C16-4155-9BF6-E30A43AE9126}|PS2ELFParser\\PS2ELFParser.vcxproj|C:\\Users\\redst\\source\\repos\\PS2ELFParser\\PS2ELFParser\\PS2ELFParser.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "AbsoluteMoniker": "D:0:0:{1869985C-2C16-4155-9BF6-E30A43AE9126}|PS2ELFParser\\PS2ELFParser.vcxproj|C:\\Users\\redst\\source\\repos\\ELFParser\\PS2ELFParser\\PS2ELFParser.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
       "RelativeMoniker": "D:0:0:{1869985C-2C16-4155-9BF6-E30A43AE9126}|PS2ELFParser\\PS2ELFParser.vcxproj|solutionrelative:PS2ELFParser\\PS2ELFParser.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     }
   ],
@@ -20,11 +20,11 @@
               "$type": "Document",
               "DocumentIndex": 0,
               "Title": "PS2ELFParser.cpp",
-              "DocumentMoniker": "C:\\Users\\redst\\source\\repos\\PS2ELFParser\\PS2ELFParser\\PS2ELFParser.cpp",
+              "DocumentMoniker": "C:\\Users\\redst\\source\\repos\\ELFParser\\PS2ELFParser\\PS2ELFParser.cpp",
               "RelativeDocumentMoniker": "PS2ELFParser\\PS2ELFParser.cpp",
-              "ToolTip": "C:\\Users\\redst\\source\\repos\\PS2ELFParser\\PS2ELFParser\\PS2ELFParser.cpp",
+              "ToolTip": "C:\\Users\\redst\\source\\repos\\ELFParser\\PS2ELFParser\\PS2ELFParser.cpp",
               "RelativeToolTip": "PS2ELFParser\\PS2ELFParser.cpp",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAA2AAAAAAAAAA==",
+              "ViewState": "AgIAAMMAAAAAAAAAAAAkwNIAAAAaAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2024-09-15T09:12:49.198Z",
               "EditorCaption": ""

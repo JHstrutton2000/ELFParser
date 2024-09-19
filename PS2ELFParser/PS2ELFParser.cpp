@@ -196,10 +196,6 @@ typedef struct {
     TARGET_OS     EI_OSABI;
     uint8_t       EI_ABRIVERSION;
     uint8_t       EI_PADDING[8];
-} ELF_IDENT;
-
-typedef struct {
-    ELF_IDENT         e_ident;
     ELF_OBJECT_TYPE   e_type;
     INSTRUCTION_ARCH  e_machine;
     uint32_t          e_version;

@@ -195,7 +195,7 @@ typedef struct {
     uint8_t       EI_VERSION;
     TARGET_OS     EI_OSABI;
     uint8_t       EI_ABRIVERSION;
-    uint8_t       EI_PADDING[8];
+    uint8_t       EI_PADDING[7];
     ELF_OBJECT_TYPE   e_type;
     INSTRUCTION_ARCH  e_machine;
     uint32_t          e_version;
@@ -293,6 +293,26 @@ int main() {
 
     // Read the file contents into the buffer
     if (file.read(buffer.data(), fileSize)) {
+        char* pos = buffer.data();
+
+        ELF_HEADER* header = (ELF_HEADER*)pos;
+        pos += sizeof(ELF_HEADER);
+
+        uint64_t entry = 0;
+
+        switch (header->EI_CLASS) {
+            case ELF_32BIT:
+                entry = ((ELF_HEADER_32*)pos)->e_entry;
+
+                pos += sizeof(PROGRAM_HEADER_32) + sizeof(SECTION_HEADER_32);
+                break;
+            case ELF_64BIT:
+                entry = ((ELF_HEADER_64*)pos)->e_entry;
+
+                pos += sizeof(SECTION_HEADER_64) + sizeof(SECTION_HEADER_64);
+
+                break;
+        }
         std::cout << "File read successfully." << std::endl;
 
         //parse(buffer);

@@ -2,74 +2,400 @@
 //
 
 #include <iostream>
-#include <fstream>
+#include <iomanip>
+#include <fstream> // For file operations
 #include <string>
 #include <vector>
+#include <map>
 
-#define ELF_FILE "C:\\Users\\redst\\Documents\\GitHub\\Transformers2004\\Mods\\SLUS_206.68"
+constexpr const char* ELF_FILE = "C:\\Users\\redst\\Documents\\GitHub\\Transformers2004\\Mods\\SLUS_206.68";
 
-struct instruction {
+enum BlockType {
+    opCode,
+    stype,
+    code,
+    special,
+    immediate,
+    offset,
+    instIndex,
+    base,
+    hint,
+    mmi,
+    reg,
+    rs,
+    rt,
+    rd,
+    fs,
+    fd,
+    ft,
+    sa
+};
+
+struct Block {
+    enum BlockType type;
+    uint8_t value;
+    uint8_t size;
+
+    Block(BlockType t, uint8_t s) : type(t), value(0xFF), size(s) {}
+    Block(uint8_t v, uint8_t s) : type(BlockType::opCode), value(v), size(s) {}
+};
+
+Block immediateBlock(BlockType::immediate, 16 );
+Block offsetBlock (BlockType::offset, 16 );
+Block rsBlock(BlockType::rs, 5 );
+Block rtBlock(BlockType::rt, 5 );
+Block rdBlock(BlockType::rd, 5 );
+Block saBlock(BlockType::sa, 5 );
+Block fsBlock(BlockType::fs, 5 );
+Block fdBlock(BlockType::fd, 5 );
+Block ftBlock(BlockType::ft, 5 );
+Block stypeBlock(BlockType::stype, 5 );
+Block baseBlock (BlockType::base,  5 );
+Block hintBlock (BlockType::hint,  5 );
+Block regBlock  (BlockType::reg,   5 );
+
+Block zeroBlock(0b00000, 5 );
+Block bc0Block (0b01000, 5 );
+Block c0Block  (0b10000, 5 );
+Block mf0Block (0b00000, 5 );
+Block mt0Block (0b00100, 5 );
+Block sBlock   (0b10000, 5 );
+Block bc1Block (0b01000, 5 );
+Block wBlock   (0b10100, 5 );
+
+Block fcBlock( 0b11, 2 );
+
+Block specialBlock (0b000000, 6);
+Block RegimmBlock  (0b000001, 6);
+Block cop0Block    (0b010000, 6);
+Block cop1Block    (0b010001, 6);
+Block mmiBlock     (0b011100, 6);
+Block mmi0Block    (0b001000, 6);
+Block mmi1Block    (0b101000, 6);
+Block mmi2Block    (0b001001, 6);
+Block mmi3Block    (0b101001, 6);
+Block pmfhlBlock   (0b110000, 6);
+Block pmthlBlock   (0b110001, 6);
+Block cacheBlock   (0b101111, 6);
+
+std::map<const char*, std::vector<Block>> opCodes = {
+//CPU
+    { "nop",          { Block{0, 32}}},
+    { "cfc2",         { Block{0b010010, 6}}},
+    { "sqc2",         { Block{0b111110, 6}}},
+    { "lqc2",         { Block{0b110110, 6}}},
+    { "J",            { Block{0b000010, 6}, Block{BlockType::offset, 26}}},
+    { "JAL",          { Block{0b000011, 6}, Block{BlockType::instIndex, 26}}},
+    { "BGTZ",         { Block{0b000111, 6}, rsBlock, zeroBlock,   offsetBlock}},
+    { "BGTZL",        { Block{0b010111, 6}, rsBlock, zeroBlock,   offsetBlock}},
+    { "BLEZ",         { Block{0b000110, 6}, rsBlock, zeroBlock,   offsetBlock}},
+    { "BLEZL",        { Block{0b010110, 6}, rsBlock, zeroBlock,   offsetBlock}},
+    { "BNE",          { Block{0b000101, 6}, rsBlock,   rtBlock,   offsetBlock}},
+    { "BNEL",         { Block{0b010101, 6}, rsBlock,   rtBlock,   offsetBlock}},
+    { "BEQ",          { Block{0b000100, 6}, rsBlock,   rtBlock,   offsetBlock}},
+    { "BEQL",         { Block{0b010100, 6}, rsBlock,   rtBlock,   offsetBlock}},
+    { "LB",           { Block{0b100000, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LBU",          { Block{0b100100, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LD",           { Block{0b110111, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LDL",          { Block{0b011010, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LDR",          { Block{0b011011, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LH",           { Block{0b100001, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LHU",          { Block{0b100101, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LW",           { Block{0b100011, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LWL",          { Block{0b100010, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LWR",          { Block{0b100110, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LWU",          { Block{0b100111, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SB",           { Block{0b101000, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SD",           { Block{0b111111, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SDL",          { Block{0b101100, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SDR",          { Block{0b101101, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SH",           { Block{0b101001, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SW",           { Block{0b101011, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SWL",          { Block{0b101010, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SWR",          { Block{0b101110, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LB",           { Block{0b100101, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "LWC1",         { Block{0b110001, 6}, baseBlock, ftBlock,   offsetBlock}},
+    { "SWC1",         { Block{0b111001, 6}, baseBlock, ftBlock,   offsetBlock}},
+    { "LQ",           { Block{0b011110, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "SQ",           { Block{0b011111, 6}, baseBlock, rtBlock,   offsetBlock}},
+    { "PREF",         { Block{0b110011, 6}, baseBlock, hintBlock, offsetBlock}},
+    { "LUI",          { Block{0b001111, 6}, zeroBlock, rtBlock,   immediateBlock}},
+    { "DADDI",        { Block{0b011000, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "DADDIU",       { Block{0b011001, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "ORI",          { Block{0b001101, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "SLTI",         { Block{0b001010, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "SLTIU",        { Block{0b001011, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "XORI",         { Block{0b001110, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "ADDIU",        { Block{0b001001, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    { "ANDI",         { Block{0b001100, 6}, rsBlock,   rtBlock,   immediateBlock}},
+    //{ "ADDI",         { specialBlock,       rsBlock,   rtBlock,   immediateBlock }},
+    { "JR",           { specialBlock, rsBlock, Block{0, 15}, Block{0b001000, 6}}},
+    { "SYNC",         { specialBlock, Block{0, 15},     stypeBlock,         Block{0b001111, 6}}},
+    { "MFHI",         { specialBlock, Block{0, 10},     rdBlock, zeroBlock, Block{0b010000, 6}}},
+    { "MFLO",         { specialBlock, Block{0, 10},     rdBlock, zeroBlock, Block{0b010010, 6}}},
+    { "MFLO1",        { mmiBlock,     Block{0, 10},     rdBlock, zeroBlock, Block{0b010010, 6}}},
+    { "ADD",          { specialBlock, rsBlock, rtBlock, rdBlock, zeroBlock, Block{0b100000, 6}}},
+    { "ADDU",         { specialBlock, rsBlock, rtBlock, rdBlock, zeroBlock, Block{0b100001, 6}}},
+    { "AND",          { specialBlock, rsBlock, rtBlock, rdBlock, zeroBlock, Block{0b100100, 6}}},
+    { "BREAK",        { specialBlock, Block{BlockType::code, 20}, Block{0b001101, 6}}},
+    { "SYSCALL",      { specialBlock, Block{BlockType::code, 20}, Block{0b001100, 6}} },
+    { "BGEZ",         { RegimmBlock,  rsBlock, Block(0b00001, 5), offsetBlock}},
+    { "BGEZAL",       { RegimmBlock,  rsBlock, Block{0b10001, 5}, offsetBlock}},
+    { "BGEZALL",      { RegimmBlock,  rsBlock, Block{0b10011, 5}, offsetBlock}},
+    { "BGEZL",        { RegimmBlock,  rsBlock, Block{0b00011, 5}, offsetBlock}},
+    { "BLTZ",         { RegimmBlock,  rsBlock, Block{0b00000, 5}, offsetBlock}},
+    { "BLTZAL",       { RegimmBlock,  rsBlock, Block{0b10000, 5}, offsetBlock}},
+    { "BLTZALL",      { RegimmBlock,  rsBlock, Block{0b10010, 5}, offsetBlock}},
+    { "BLTZL",        { RegimmBlock,  rsBlock, Block{0b00010, 5}, offsetBlock}},
+    { "BC0F",         { cop0Block,  bc0Block,  Block{0b00000, 5}, offsetBlock} },
+    { "BC0FL",        { cop0Block,  bc0Block,  Block{0b00010, 5}, offsetBlock} },
+    { "BC0T",         { cop0Block,  bc0Block,  Block{0b00001, 5}, offsetBlock} },
+    { "BC0TL",        { cop0Block,  bc0Block,  Block{0b00011, 5}, offsetBlock} },
+    { "CACHE BFH",    { cacheBlock, baseBlock, Block{0b01100, 5}, offsetBlock} },
+    { "CACHE BHINBT", { cacheBlock, baseBlock, Block{0b01010, 5}, offsetBlock} },
+    { "CACHE BXLBT",  { cacheBlock, baseBlock, Block{0b01100, 5}, offsetBlock} },
+    { "CACHE BXSBT",  { cacheBlock, baseBlock, Block{0b00110, 5}, offsetBlock} },
+    { "CACHE DHIN",   { cacheBlock, baseBlock, Block{0b11010, 5}, offsetBlock} },
+    { "CACHE DHWBIN", { cacheBlock, baseBlock, Block{0b11000, 5}, offsetBlock} },
+    { "CACHE DHWOIN", { cacheBlock, baseBlock, Block{0b11100, 5}, offsetBlock} },
+    { "CACHE DXIN",   { cacheBlock, baseBlock, Block{0b10110, 5}, offsetBlock} },
+    { "CACHE DXLDT",  { cacheBlock, baseBlock, Block{0b10001, 5}, offsetBlock} },
+    { "CACHE DXLTG",  { cacheBlock, baseBlock, Block{0b10000, 5}, offsetBlock} },
+    { "CACHE DXSDT",  { cacheBlock, baseBlock, Block{0b10011, 5}, offsetBlock} },
+    { "CACHE DXSTG",  { cacheBlock, baseBlock, Block{0b10010, 5}, offsetBlock} },
+    { "CACHE DXWBIN", { cacheBlock, baseBlock, Block{0b10100, 5}, offsetBlock} },
+    { "CACHE IFL",    { cacheBlock, baseBlock, Block{0b01110, 5}, offsetBlock} },
+    { "CACHE IHIN",   { cacheBlock, baseBlock, Block{0b01011, 5}, offsetBlock} },
+    { "CACHE IXIN",   { cacheBlock, baseBlock, Block{0b00111, 5}, offsetBlock} },
+    { "CACHE IXLDT",  { cacheBlock, baseBlock, Block{0b00001, 5}, offsetBlock} },
+    { "CACHE IXLTG",  { cacheBlock, baseBlock, Block{0b00000, 5}, offsetBlock} },
+    { "CACHE IXSDT",  { cacheBlock, baseBlock, Block{0b00101, 5}, offsetBlock} },
+    { "CACHE IXSTG",  { cacheBlock, baseBlock, Block{0b00100, 5}, offsetBlock} },
+    { "BC1F",         { cop1Block,    bc1Block,Block{0b00000, 5}, offsetBlock} },
+    { "BC1FL",        { cop1Block,    bc1Block,Block{0b00010, 5}, offsetBlock} },
+    { "BC1T",         { cop1Block,    bc1Block,Block{0b00001, 5}, offsetBlock} },
+    { "BC1TL",        { cop1Block,    bc1Block,Block{0b00011, 5}, offsetBlock} },
+    { "TEQI",         { RegimmBlock,  rsBlock, Block{0b01100, 5}, immediateBlock} },
+    { "TGEI",         { RegimmBlock,  rsBlock, Block{0b01000, 5}, immediateBlock} },
+    { "TGEIU",        { RegimmBlock,  rsBlock, Block{0b01001, 5}, immediateBlock} },
+    { "TLTI",         { RegimmBlock,  rsBlock, Block{0b01010, 5}, immediateBlock} },
+    { "TLTIU",        { RegimmBlock,  rsBlock, Block{0b01011, 5}, immediateBlock} },
+    { "TNEI",         { RegimmBlock,  rsBlock, Block{0b01110, 5}, immediateBlock} },
+    { "MTSAB",        { RegimmBlock,  rsBlock, Block{0b11000, 5}, immediateBlock} },
+    { "MTSAH",        { RegimmBlock,  rsBlock, Block{0b11001, 5}, immediateBlock} },
+    { "MTLO1",        { mmiBlock,     rsBlock, Block{0, 15}, Block{0b010011, 6}} },
+    { "MTHI",         { specialBlock, rsBlock, Block{0, 15}, Block{0b010001, 6}}},
+    { "MTLO",         { specialBlock, rsBlock, Block{0, 15}, Block{0b010011, 6}}},
+    { "TGE",          { specialBlock, rsBlock, rtBlock,          Block{BlockType::code, 10}, Block{0b110000, 6}} },
+    { "TGEU",         { specialBlock, rsBlock, rtBlock,          Block{BlockType::code, 10}, Block{0b110001, 6}} },
+    { "TLT",          { specialBlock, rsBlock, rtBlock,          Block{BlockType::code, 10}, Block{0b110010, 6}} },
+    { "TLTU",         { specialBlock, rsBlock, rtBlock,          Block{BlockType::code, 10}, Block{0b110011, 6}} },
+    { "TNE",          { specialBlock, rsBlock, rtBlock,          Block{BlockType::code, 10}, Block{0b110110, 6}} },
+    { "TEQ",          { specialBlock, rsBlock, rtBlock, rdBlock, Block{BlockType::code, 10}, Block{0b110100, 6}} },
+    { "PMFHI",        { mmiBlock,     Block{0, 10},       rdBlock, Block{0b01000, 5}, mmi2Block}},
+    { "PMFHL.LH",     { mmiBlock,     Block{0, 10},       rdBlock, Block{0b00011, 5}, pmfhlBlock}},
+    { "PMFHL.LW",     { mmiBlock,     Block{0, 10},       rdBlock, Block{0b00000, 5}, pmfhlBlock}},
+    { "PMFHL.SH",     { mmiBlock,     Block{0, 10},       rdBlock, Block{0b00100, 5}, pmfhlBlock}},
+    { "PMFHL.SLW",    { mmiBlock,     Block{0, 10},       rdBlock, Block{0b00010, 5}, pmfhlBlock}},
+    { "PMFHL.UW",     { mmiBlock,     Block{0, 10},       rdBlock, Block{0b00001, 5}, pmfhlBlock}},
+    { "PMFLO",        { mmiBlock,     Block{0, 10},       rdBlock, Block{0b01001, 5}, mmi2Block}},
+    { "MFHI1",        { mmiBlock,     Block{0, 10},       rdBlock, zeroBlock, Block{0b010000, 6}}},
+    { "MFSA",         { specialBlock, Block{0, 10},       rdBlock, zeroBlock, Block{0b101000, 6}}},
+    { "DSRAV",        { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b010111, 6}}},
+    { "DSRLV",        { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b010110, 6}}},
+    { "DSUB",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b101110, 6}}},
+    { "DSUBU",        { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b101111, 6}}},
+    { "JALR",         { specialBlock, rsBlock, zeroBlock, rdBlock, zeroBlock, Block{0b001001, 6}}},
+    { "MOVN",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b001011, 6}}},
+    { "MOVZ",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b001010, 6}}},
+    { "NOR",          { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b100111, 6}}},
+    { "OR",           { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b100101, 6}}},
+    { "SLLV",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b000100, 6}}},
+    { "SLT",          { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b101010, 6}}},
+    { "SLTU",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b101011, 6}}},
+    { "SRAV",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b000111, 6}}},
+    { "SRLV",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b000110, 6}}},
+    { "SUB",          { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b100010, 6}}},
+    { "SUBU",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b100011, 6}}},
+    { "DADD",         { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b101100, 6}}},
+    { "DADDU",        { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b101101, 6}}},
+    { "XOR",          { specialBlock, rsBlock, rtBlock,   rdBlock, zeroBlock, Block{0b100110, 6}}},
+    { "MADD",         { mmiBlock, rsBlock, rtBlock,       rdBlock, zeroBlock, Block{0b000000, 6}} },
+    { "MADD1",        { mmiBlock, rsBlock, rtBlock,       rdBlock, zeroBlock, Block{0b100000, 6}} },
+    { "MADDU",        { mmiBlock, rsBlock, rtBlock,       rdBlock, zeroBlock, Block{0b000001, 6}} },
+    { "MADDU1",       { mmiBlock, rsBlock, rtBlock,       rdBlock, zeroBlock, Block{0b100001, 6}} },
+    { "DSLL",         { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111000, 6}} },
+    { "DSLL32",       { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111100, 6}} },
+    { "DSLLV",        { specialBlock, rsBlock,   rtBlock, rdBlock, saBlock,   Block{0b010100, 6}} },
+    { "DSRA",         { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111011, 6}} },
+    { "DSRA32",       { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111111, 6}} },
+    { "DSRL",         { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111010, 6}} },
+    { "DSRL32",       { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111110, 6}} },
+    { "SLL",          { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b000000, 6}} },
+    { "SRA",          { specialBlock, zeroBlock, rsBlock, rdBlock, saBlock,   Block{0b000011, 6}} },
+    { "SRL",          { specialBlock, zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b000010, 6}} },
+    { "PSLLH",        { mmiBlock,     zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b110100, 6}} },
+    { "PSLLW",        { mmiBlock,     zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111100, 6}} },
+    { "PSRAH",        { mmiBlock,     zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b110111, 6}} },
+    { "PSRAW",        { mmiBlock,     zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111111, 6}} },
+    { "PSRLH",        { mmiBlock,     zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b110110, 6}} },
+    { "PSRLW",        { mmiBlock,     zeroBlock, rtBlock, rdBlock, saBlock,   Block{0b111110, 6}} },
+    { "ABS.S",        { cop1Block, sBlock, zeroBlock, fsBlock, fdBlock,       Block{0b000101, 6}} },
+    { "CVT.S.W",      { cop1Block, wBlock, zeroBlock, fsBlock, fdBlock,       Block{0b100000, 6}} },
+    { "CVT.W.S",      { cop1Block, sBlock, zeroBlock, fsBlock, fdBlock,       Block{0b100100, 6}} },
+    { "MOV.S",        { cop1Block, sBlock, zeroBlock, fsBlock, fdBlock,       Block{0b000110, 6}} },
+    { "NEG.S",        { cop1Block, sBlock, zeroBlock, fsBlock, fdBlock,       Block{0b000111, 6}} },
+    { "PLZCW",        { mmiBlock, rsBlock, zeroBlock,  rdBlock,  zeroBlock,   Block{0b000100, 5}} },
+    { "MULT",         { specialBlock, rsBlock, rtBlock, rdBlock, zeroBlock,   Block{0b011000, 6}} },
+    { "MULT1",        { mmiBlock,     rsBlock, rtBlock, rdBlock, zeroBlock,   Block{0b011000, 6}} },
+    { "MULTU",        { specialBlock, rsBlock, rtBlock, rdBlock, zeroBlock,   Block{0b011001, 6}} },
+    { "MULTU1",       { mmiBlock,  rsBlock, rtBlock, rdBlock,    zeroBlock,   Block{0b011001, 6}} },
+    { "ADDA.S",       { cop1Block, sBlock, ftBlock, fsBlock,     zeroBlock,   Block{0b011000, 6}} },
+    { "MADDA.S",      { cop1Block, sBlock, ftBlock, fsBlock,     zeroBlock,   Block{0b011110, 6}} },
+    { "MSUBA.S",      { cop1Block, sBlock, ftBlock, fsBlock,     zeroBlock,   Block{0b011111, 6}} },
+    { "MULA.S",       { cop1Block, sBlock, ftBlock, fsBlock,     zeroBlock,   Block{0b011010, 6}} },
+    { "SUBA.S",       { cop1Block, sBlock, ftBlock, fsBlock,     zeroBlock,   Block{0b011001, 6}} },
+    { "ADD.S",        { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b000000, 6}} },
+    { "DIV.S",        { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b000011, 6}} },
+    { "MADD.S",       { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b011100, 6}} },
+    { "MAX.S",        { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b101000, 6}} },
+    { "MIN.S",        { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b101001, 6}} },
+    { "MSUB.S",       { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b011101, 6}} },
+    { "MUL.S",        { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b000010, 6}} },
+    { "RSQRT.S",      { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b010110, 6}} },
+    { "SQRT.S",       { cop1Block, sBlock, ftBlock, zeroBlock, fdBlock,       Block{0b000100, 6}} },
+    { "SUB.S",        { cop1Block, sBlock, ftBlock, fsBlock, fdBlock,         Block{0b000001, 6}} },
+    { "DIV",          { specialBlock, rsBlock, rtBlock, Block{0, 10},         Block{0b011010, 6}} },
+    { "DIVU",         { specialBlock, rsBlock, rtBlock, Block{0, 10},         Block{0b011011, 6}} },
+    { "MULT",         { specialBlock, rsBlock, rtBlock, Block{0, 10},         Block{0b011000, 6}} },
+    { "MULTU",        { specialBlock, rsBlock, rtBlock, Block{0, 10},         Block{0b011001, 6}} },
+    { "DIV1",         { mmiBlock, rsBlock, rtBlock,     Block{0, 10},         Block{0b011010, 6}} },
+    { "DIVU1",        { mmiBlock, rsBlock, rtBlock,     Block{0, 10},         Block{0b011011, 6}} },
+    { "MTHI1",        { mmiBlock, rsBlock,              Block{0, 15},         Block{0b010001, 6}} },
+    { "MTSA",         { specialBlock, rsBlock,          Block{0, 15},         Block{0b101001, 6}} },
+    { "DI",           { cop0Block, c0Block,             Block{0, 15},         Block{0b111001, 6}} },
+    { "EI",           { cop0Block, c0Block,             Block{0, 15},         Block{0b111000, 6}} },
+    { "ERET",         { cop0Block, c0Block,             Block{0, 15},         Block{0b011000, 6}} },
+    { "TLBP",         { cop0Block, c0Block,             Block{0, 15},         Block{0b001000, 6}} },
+    { "TLBR",         { cop0Block, c0Block,             Block{0, 15},         Block{0b000001, 6}} },
+    { "TLBWI",        { cop0Block, c0Block,             Block{0, 15},         Block{0b000010, 6}} },
+    { "TLBWR",        { cop0Block, c0Block,             Block{0, 15},         Block{0b000110, 6}} },
+    { "PMTHI",        { mmiBlock, rsBlock,   Block{0, 10},       Block{0b01000, 5}, mmi3Block} },
+    { "PMTHL.LW",     { mmiBlock, rsBlock,   Block{0, 10},       Block{0b00000, 5}, pmthlBlock} },
+    { "PMTLO",        { mmiBlock, rsBlock,   Block{0, 10},       Block{0b01001, 5}, mmi3Block} },
+    { "PDIVBW",       { mmiBlock, rsBlock,   rtBlock, zeroBlock, Block{0b11101, 5}, mmi2Block} },
+    { "PDIVUW",       { mmiBlock, rsBlock,   rtBlock, zeroBlock, Block{0b01101, 5}, mmi3Block} },
+    { "PDIVW",        { mmiBlock, rsBlock,   rtBlock, zeroBlock, Block{0b01101, 5}, mmi2Block} },
+    { "PABSH",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b00101, 5}, mmi1Block} },
+    { "PABSW",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b00001, 5}, mmi1Block} },
+    { "PEXCH",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11010, 5}, mmi3Block} },
+    { "PEXCW",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11110, 5}, mmi3Block} },
+    { "PEXEH",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11010, 5}, mmi2Block} },
+    { "PEXEW",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11110, 5}, mmi2Block} },
+    { "PEXT5",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11110, 5}, mmi0Block} },
+    { "PCPYH",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11011, 5}, mmi3Block} },
+    { "PPAC5",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11111, 5}, mmi0Block} },
+    { "PREVH",        { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11011, 5}, mmi2Block} },
+    { "PROT3W",       { mmiBlock, zeroBlock, rtBlock, rdBlock,   Block{0b11111, 5}, mmi2Block} },
+    { "PADDB",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01000, 5}, mmi0Block} },
+    { "PADDH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00100, 5}, mmi0Block} },
+    { "PADDSB",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11000, 5}, mmi0Block} },
+    { "PADDSH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10100, 5}, mmi0Block} },
+    { "PADDSW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10000, 5}, mmi0Block} },
+    { "PADDUB",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11000, 5}, mmi1Block} },
+    { "PADDUH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10100, 5}, mmi1Block} },
+    { "PADDUW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10000, 5}, mmi1Block} },
+    { "PADDW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00000, 5}, mmi0Block} },
+    { "PADSBH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00100, 5}, mmi1Block} },
+    { "PAND",         { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10010, 5}, mmi2Block} },
+    { "PCEQB",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01010, 5}, mmi1Block} },
+    { "PCEQH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00110, 5}, mmi1Block} },
+    { "PCEQW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00010, 5}, mmi1Block} },
+    { "PCGTB",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01010, 5}, mmi0Block} },
+    { "PCGTH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00110, 5}, mmi0Block} },
+    { "PCGTW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00010, 5}, mmi0Block} },
+    { "PCPYLD",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01110, 5}, mmi2Block} },
+    { "PCPYUD",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01110, 5}, mmi3Block} },
+    { "PEXTLB",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11010, 5}, mmi0Block} },
+    { "PEXTLH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10110, 5}, mmi0Block} },
+    { "PEXTLW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10010, 5}, mmi0Block} },
+    { "PEXTUB",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11010, 5}, mmi1Block} },
+    { "PEXTUH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10110, 5}, mmi1Block} },
+    { "PEXTUW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10010, 5}, mmi1Block} },
+    { "PHMADH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10001, 5}, mmi2Block} },
+    { "PHMSBH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10101, 5}, mmi2Block} },
+    { "PINTEH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01010, 5}, mmi3Block} },
+    { "PINTH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01010, 5}, mmi2Block} },
+    { "PMADDH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10000, 5}, mmi2Block} },
+    { "PMADDUW",      { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00000, 5}, mmi3Block} },
+    { "PMADDW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00000, 5}, mmi2Block} },
+    { "PMAXH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00111, 5}, mmi0Block} },
+    { "PMAXW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00011, 5}, mmi0Block} },
+    { "PMINH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00111, 5}, mmi1Block} },
+    { "PMINW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00011, 5}, mmi1Block} },
+    { "PMSUBH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10100, 5}, mmi2Block} },
+    { "PMSUBW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00100, 5}, mmi2Block} },
+    { "PMULTH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11100, 5}, mmi2Block} },
+    { "PMULTUW",      { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01100, 5}, mmi3Block} },
+    { "PMULTW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01100, 5}, mmi2Block} },
+    { "PNOR",         { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10011, 5}, mmi3Block} },
+    { "POR",          { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10010, 5}, mmi3Block} },
+    { "PPACB",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11011, 5}, mmi0Block} },
+    { "PPACH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10111, 5}, mmi0Block} },
+    { "PPACW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10011, 5}, mmi0Block} },
+    { "PSLLVW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00010, 5}, mmi2Block} },
+    { "PSRAVW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00011, 5}, mmi3Block} },
+    { "PSRLVW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00011, 5}, mmi2Block} },
+    { "PSUBB",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b01001, 5}, mmi0Block} },
+    { "PSUBH",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00101, 5}, mmi0Block} },
+    { "PSUBSB",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11001, 5}, mmi0Block} },
+    { "PSUBSH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10101, 5}, mmi0Block} },
+    { "PSUBSW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10001, 5}, mmi0Block} },
+    { "PSUBUB",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11001, 5}, mmi1Block} },
+    { "PSUBUH",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10101, 5}, mmi1Block} },
+    { "PSUBUW",       { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10001, 5}, mmi1Block} },
+    { "PSUBW",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b00001, 5}, mmi0Block} },
+    { "PXOR",         { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b10011, 5}, mmi2Block} },
+    { "QFSRV",        { mmiBlock, rsBlock,   rtBlock, rdBlock,   Block{0b11011, 5}, mmi1Block} },
+    { "MFPC",         { cop0Block, mf0Block, rtBlock, Block{0b11001, 5}, zeroBlock, regBlock, Block{1, 1}} },
+    { "MFPS",         { cop0Block, mf0Block, rtBlock, Block{0b11001, 5}, zeroBlock, regBlock, Block{0, 1}} },
+    { "MTPC",         { cop0Block, mt0Block, rtBlock, Block{0b11001, 5}, zeroBlock, regBlock, Block{1, 1}} },
+    { "MTPS",         { cop0Block, mt0Block, rtBlock, Block{0b11001, 5}, zeroBlock, regBlock, Block{0, 1}} },
+    { "MFBPC",        { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000000, 11}} },
+    { "MFDAB",        { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000100, 11}} },
+    { "MFDABM",       { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000101, 11}} },
+    { "MFDVB",        { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000110, 11}} },
+    { "MFDVBM",       { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000111, 11}} },
+    { "MFIAB",        { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000010, 11}} },
+    { "MFIABM",       { cop0Block, mf0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000011, 11}} },
+    { "MTBPC",        { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000000, 11}} },
+    { "MTDAB",        { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000100, 11}} },
+    { "MTDABM",       { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000101, 11}} },
+    { "MTDVB",        { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000110, 11}} },
+    { "MTDVBM",       { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000111, 11}} },
+    { "MTIAB",        { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000010, 11}} },
+    { "MTIABM",       { cop0Block, mt0Block, rtBlock, Block{0b11000, 5}, Block{0b00000000011, 11}} },
+    { "MFC0",         { cop0Block, mf0Block, rtBlock, rdBlock,           Block{0b00000000000, 11}} },
+    { "MTC0",         { cop0Block, mt0Block, rtBlock, rdBlock,           Block{0b00000000000, 11}} },
+    { "CFC1",         { cop1Block, Block{0b00010, 5}, rtBlock, fsBlock,  Block{0b00000000000, 11}} },
+    { "CTC1",         { cop1Block, Block{0b00110, 5}, rtBlock, fsBlock,  Block{0b00000000000, 11}} },
+    { "MFC1",         { cop1Block, Block{0b00000, 5}, rtBlock, fsBlock,  Block{0b00000000000, 11}} },
+    { "MTC1",         { cop1Block, Block{0b00100, 5}, rtBlock, fsBlock,  Block{0b00000000000, 11}} },
+    { "C.EQ.S",       { cop1Block, sBlock,  ftBlock, fsBlock, zeroBlock, fcBlock, Block{0, 1}, Block{0b01, 2}, Block{0, 1}} },
+    { "C.F.S",        { cop1Block, sBlock,  ftBlock, fsBlock, zeroBlock, fcBlock, Block{0, 1}, Block{0b00, 2}, Block{0, 1}} },
+    { "C.LE.S",       { cop1Block, sBlock,  ftBlock, fsBlock, zeroBlock, fcBlock, Block{0, 1}, Block{0b11, 2}, Block{0, 1}} },
+    { "C.LT.S",       { cop1Block, sBlock,  ftBlock, fsBlock, zeroBlock, fcBlock, Block{0, 1}, Block{0b10, 2}, Block{0, 1}} },
+};
+
+// 8
+// 16
+// 24
+// 32
+struct Instruction {
     const char* name;
     uint32_t mask;
 };
 
-#define REGIMM 1000000
-
-//instruction instructions[] = {
-//    { "ADD",     0b00000100000000000000000000000000 },
-//    //ADDI
-//    { "ADDIU",   0b00000000000000000000000000100100 },
-//    { "ADDU",    0b10000100000000000000000000000000 },
-//    { "AND",     0b00100100000000000000000000000000 },
-//    { "ANDI",    0b00000000000000000000000000001100 },
-//    { "BEQ",     0b00000000000000000000000000001000 },
-//    { "BEQL",    0b00000000000000000000000000001010 },
-//    { "BGEZ",    0b00000000000000001000000000100000 },
-//    { "BGEZAL",  0b00000000000000001000100000100000 },
-//    { "BGEZALL", 0b00000000000000001100100000100000 },
-//    { "BGEZL",   0b00000000000000001100000000100000 },
-//    { "BGTZ",    0b00000000000000000000000000111000 },
-//    { "BGTZL",   0b00000000000000000000000000111010 },
-//    { "BLEZ",    0b00000000000000000000000000011000 },
-//    { "BLEZL",   0b00000000000000000000000000011010 },
-//
-//    { "BLTZ",    0b00000000000000000000000000100000 },
-//    { "BLTZAL",  0b00000000000000000000100000100000 },
-//    { "BLTZALL", 0b00000000000000000100100000100000 },
-//    { "BLTZL",   0b00000000000000000100000000100000 },
-//    { "BNE",     0b00000000000000000000000000101000 },
-//    { "BNEL",    0b00000000000000000000000000101010 },
-//    { "BREAK",   0b10110000000000000000000000000000 },
-//    { "DADD",    0b00110100000000000000000000000000 },
-//    { "DADDI",   0b00000000000000000000000000011000 },
-//    { "DADDIU",  0b00000000000000000000000000100110 },
-//    { "DADDU",   0b10110100000000000000000000000000 },
-//    { "DIV",     0b01011000000000000000000000000000 },
-//    { "DIVU",    0b11011000000000000000000000000000 },
-//    { "DSLL",    0b00111000000000000000000000000000 },
-//    { "DSLL32",  0b00111100000000000000000000000000 },
-//    { "DSLLV",   0b00101000000000000000000000000000 },
-//    { "DSRA",    0b11011100000000000000000000000000 },
-//    { "DSRA32",  0b11111100000000000000000000000000 },
-//    { "DSRAV",   0b11101000000000000000000000000000 },
-//    { "DSRL",    0b01011100000000000000000000000000 },
-//    { "DSRL32",  0b00111000000000000000000000000000 },
-//    { "DSLL",    0b01101000000000000000000000000000 },
-//    { "DSUB",    0b01110100000000000000000000000000 },
-//    { "DSUBU",   0b11110100000000000000000000000000 },
-//    { "J",       0b00000000000000000000000000010000 },
-//    { "JAL",     0b00000000000000000000000000110000 },
-//    //{ "JALR",    0b00100100000000000000000000000000 }, // Duplicate ?? This format will not work...
-//    { "JR",      0b00001000000000000000000000000000 },
-//    { "LB",      0b00000000000000000000000000000001 },
-//    { "LBU",     0b00000000000000000000000000001001 },
-//    { "LD",      0b00000000000000000000000000111011 },
-//    { "LDL",     0b00000000000000000000000000010110 },
-//    { "DSLL",    0b00100100000000000000000000000000 }
-//
-//};
-//
-//instruction NOP{ "NOP", 0 };
 
 enum FORMAT : uint8_t{ 
     ELF_32BIT = 1, 
@@ -199,7 +525,7 @@ typedef struct {
     ELF_OBJECT_TYPE   e_type;
     INSTRUCTION_ARCH  e_machine;
     uint32_t          e_version;
-} ELF_HEADER;
+} ELF_IDENTITY_HEADER;
 
 typedef struct {
     uint32_t e_entry;
@@ -275,6 +601,157 @@ typedef struct {
     uint64_t sh_entsize;
 } SECTION_HEADER_64;
 
+//uint64_t getEntry(char* pos) {
+//    ELF_HEADER* header = (ELF_HEADER*)pos;
+//    pos += sizeof(ELF_HEADER);
+//
+//    switch (header->EI_CLASS) {
+//    case ELF_32BIT:
+//        return (uint64_t)((ELF_HEADER_32*)pos)->e_entry;
+//
+//        //pos += sizeof(PROGRAM_HEADER_32) + sizeof(SECTION_HEADER_32);
+//        break;
+//    case ELF_64BIT:
+//        return ((ELF_HEADER_64*)pos)->e_entry;
+//
+//        //pos += sizeof(PROGRAM_HEADER_64) + sizeof(SECTION_HEADER_64);
+//        break;
+//    }
+//}
+
+bool bit32;
+
+#define HEADER_VALUE(x, attribute) (bit32 ? (x.Header32.attribute) : (x.Header64.attribute))
+
+#define HEADER_SET(x, val, type32, type64) if(bit32){ x.Header32 = *(type32*)val; } else { x.Header64 = *(type64*)val; }
+//ELF.Header32 = *(ELF_HEADER_32*)pos
+
+typedef struct{
+    ELF_IDENTITY_HEADER Identity;
+
+    union {
+        ELF_HEADER_32 Header32;
+        ELF_HEADER_64 Header64;
+    };
+} ELF_HEADER;
+
+typedef struct {
+    union {
+        PROGRAM_HEADER_32 Header32;
+        PROGRAM_HEADER_64 Header64;
+    };
+} PROGRAM_HEADER;
+
+typedef struct{
+    union {
+        SECTION_HEADER_32 Header32;
+        SECTION_HEADER_64 Header64;
+    };
+} SECTION_HEADER;
+
+ELF_HEADER Elf;
+PROGRAM_HEADER Program;
+SECTION_HEADER Section;
+
+void parseHeader(char* pos) {
+    ELF_IDENTITY_HEADER* header = (ELF_IDENTITY_HEADER*)pos;
+    Elf.Identity = *header;
+
+    switch (header->EI_CLASS) {
+        case ELF_32BIT:
+            bit32 = true;
+
+            Elf.Header32 = *(ELF_HEADER_32*)(&pos[sizeof(ELF_IDENTITY_HEADER)]);
+            Program.Header32 = *(PROGRAM_HEADER_32*)(&pos[Elf.Header32.e_phoff]);
+            Section.Header32 = *(SECTION_HEADER_32*)(&pos[Elf.Header32.e_shoff]);
+
+            break;
+        case ELF_64BIT:
+            bit32 = false;
+
+            Elf.Header64 = *(ELF_HEADER_64*)(&pos[sizeof(ELF_IDENTITY_HEADER)]);
+            Program.Header64 = *(PROGRAM_HEADER_64*)(&pos[Elf.Header32.e_phoff]);
+            Section.Header64 = *(SECTION_HEADER_64*)(&pos[Elf.Header32.e_shoff]);
+
+            break;
+    }
+}
+
+bool parseBlocks(uint32_t* curInstruction, std::vector<Block>blocks) {
+    bool pass = true;
+    uint8_t bitPos = 32;
+
+    for (const auto& block : blocks) {
+        bitPos -= block.size;
+
+        switch (block.type) {
+            case BlockType::stype:
+            case BlockType::code:
+            case BlockType::special:
+            case BlockType::immediate:
+            case BlockType::offset:
+            case BlockType::instIndex:
+            case BlockType::base:
+            case BlockType::hint:
+            case BlockType::mmi:
+            case BlockType::reg:
+            case BlockType::rs:
+            case BlockType::rt:
+            case BlockType::rd:
+            case BlockType::fs:
+            case BlockType::fd:
+            case BlockType::ft:
+            case BlockType::sa:
+                break;
+            case BlockType::opCode:
+            default: {
+                auto mask = 0xFFFFFFFF >> (32 - block.size);
+
+                if (block.value != ((*curInstruction >> bitPos) & mask)) {
+                    pass = false;
+                }
+                break;
+
+            }
+        }
+    }
+
+    return pass;
+}
+
+std::ofstream ofile("output.txt");
+
+void parseProg(char* pos, char* lastPos) {
+
+    auto entry = HEADER_VALUE(Elf, e_entry);
+
+    for (uint32_t* curInstruction = (uint32_t*)(&pos[(entry >> 12) | (entry & 0x8)]); curInstruction < (uint32_t*)lastPos; curInstruction++) {
+        const char* instName = "Unknown";
+        bool pass = false;
+
+        for (const auto& pair : opCodes) {
+            if (parseBlocks(curInstruction, pair.second)) {
+                pass = true;
+                instName = pair.first;
+
+                break;
+            }
+        }
+
+        if (ofile.is_open()) {
+
+            ofile << "0x"
+                << std::setfill('0') << std::setw(8) << std::hex
+                << (uint32_t)((char*)curInstruction - pos) - 0x100
+                << ": "
+                << (pass ? instName : "Unknown")
+                << std::endl;
+        }
+
+    }
+
+}
+
 int main() {
 
     std::ifstream file(ELF_FILE, std::ios::binary | std::ios::ate);
@@ -294,41 +771,17 @@ int main() {
     // Read the file contents into the buffer
     if (file.read(buffer.data(), fileSize)) {
         char* pos = buffer.data();
+        char* entryAddr = nullptr;
 
-        ELF_HEADER* header = (ELF_HEADER*)pos;
-        pos += sizeof(ELF_HEADER);
+        parseHeader(pos);
 
-        uint64_t entry = 0;
-
-        switch (header->EI_CLASS) {
-            case ELF_32BIT:
-                entry = ((ELF_HEADER_32*)pos)->e_entry;
-
-                pos += sizeof(PROGRAM_HEADER_32) + sizeof(SECTION_HEADER_32);
-                break;
-            case ELF_64BIT:
-                entry = ((ELF_HEADER_64*)pos)->e_entry;
-
-                pos += sizeof(SECTION_HEADER_64) + sizeof(SECTION_HEADER_64);
-
-                break;
-        }
-        std::cout << "File read successfully." << std::endl;
-
-        //parse(buffer);
+        parseProg(pos, &pos[fileSize]);
     }
     else {
         std::cerr << "Failed to read the file." << std::endl;
     }
 
+    ofile.close();
+
     std::cin;
 }
-
-
-//void parse(std::vector<char> buffer) {
-//    for (char b : buffer) {
-//        //if ((b & ADDIU_MASK) == ADDIU) {
-//
-//        //}
-//    }
-//}

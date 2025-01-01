@@ -3,7 +3,8 @@
 
 #include <iostream>
 #include <iomanip>
-#include <fstream> // For file operations
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <map>
@@ -691,19 +692,22 @@ bool parseBlocks(uint32_t* curInstruction, std::vector<Block>blocks) {
     return true;
 }
 
-//#define PRINT_ALL
+#define PRINT_ALL
 #define LOG_ASCII
+#define THREAD_COUNT 30
 
 
 std::ofstream ofile("output.txt");
 
-std::mutex fileMutex;
+std::mutex logMutex[THREAD_COUNT];
 
 char* entryAddr;
 
 void parseProg(uint32_t* pos, uint32_t* lastPos, int threadIndex = 1) {
+    std::condition_variable cv;
     size_t size = lastPos - pos;
-
+    std::stringstream ss;
+    
     int lastprog = NULL;
     int unknownCount = 0;
     int lastUnknownCount = 0;
@@ -733,25 +737,44 @@ void parseProg(uint32_t* pos, uint32_t* lastPos, int threadIndex = 1) {
             lastUnknownCount = unknownCount;
 
         }
+
 #ifdef PRINT_ALL
-        ofile << "0x"
-            << std::setfill('0') << std::setw(8) << std::hex
-            << (uint32_t)((char*)curInstruction - pos) - 0x100
-            << ": 0x"
-            << std::setfill('0') << std::setw(8) << std::hex
-            << (uint32_t)((char*)curInstruction - pos) - 0x100 + 0x00100000
-            << ": "
-            << (pass ? instName : "Unknown")
-            << std::endl;
+
+        uint32_t rawaddr = (char*)(&pos[i]) - entryAddr + 0x108;
+        uint32_t ps2Addr = rawaddr + 0x100000;
+
+        ss << " 0x" << std::setfill('0') << std::setw(8) << std::hex << ps2Addr << ":"
+           << " 0x" << std::setfill('0') << std::setw(8) << std::hex << pos[i]
+           << " " << instName;
+
+#ifdef LOG_ASCII
+        if (pass == false) {
+            std::string asciiRep;
+            for (int j = 0; j < 4; ++j) {
+                char c = static_cast<char>((pos[i] >> (8 * (3 - j))) & 0xFF);
+                if (std::isprint(static_cast<unsigned char>(c))) {
+                    asciiRep += c;
+                }
+                else {
+                    asciiRep += '.'; // Placeholder for non-printable characters
+                }
+            }
+
+            // Log the ASCII representation
+            ss << " [" << asciiRep << "]";
+        }
+
+
+        ss << std::endl;
+
+#endif
 
 #else
         if (pass == false) {
             uint32_t rawaddr = (char*)(&pos[i]) - entryAddr + 0x108;
             uint32_t ps2Addr = rawaddr + 0x100000;
 
-            std::lock_guard<std::mutex> lock(fileMutex);
-
-            ofile << " 0x" << std::setfill('0') << std::setw(8) << std::hex << ps2Addr << ":"
+            ss << " 0x" << std::setfill('0') << std::setw(8) << std::hex << ps2Addr << ":"
                   << " 0x" << std::setfill('0') << std::setw(8) << std::hex << pos[i];
 #ifdef LOG_ASCII
             std::string asciiRep;
@@ -766,28 +789,40 @@ void parseProg(uint32_t* pos, uint32_t* lastPos, int threadIndex = 1) {
             }
 
             // Log the ASCII representation
-            ofile << " [" << asciiRep << "]" << std::endl;
+            ss << " [" << asciiRep << "]" << std::endl;
 
 #else
-            ofile << std::endl;
+            ss << std::endl;
 #endif
 
-            unknownCount++;
         }
 
 #endif
+
+        if (pass == false) {
+            unknownCount++;
+        }
     }
+
+    printf("\033[%d;1H\033[KThread #%d Waiting to log", threadIndex, threadIndex);
+
+RETRY:
+    if (logMutex[threadIndex - 1].try_lock() == false) {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        goto RETRY;
+    }
+
+    ofile << ss.str();
 
     printf("\033[%d;1H\033[K\033[32mThread #%d\033[0m: %d Failed", threadIndex, threadIndex, unknownCount);
 
     std::cout << " 0x" << std::setfill('0') << std::setw(8) << std::hex << (uint32_t)pos << " - 0x" << std::setfill('0') << std::setw(8) << std::hex << (uint32_t)lastPos << "\n";
-}
 
-#define THREAD_COUNT 10
+    logMutex[threadIndex - 1].unlock();
+}
 
 
 int main() {
-
     std::ifstream file(ELF_FILE, std::ios::binary | std::ios::ate);
 
     if (!file.is_open()) {
@@ -813,7 +848,6 @@ int main() {
 
         int arrSize = (fileSize / sizeof(uint32_t)) / (THREAD_COUNT);
 
-
         auto entry = HEADER_VALUE(Elf, e_entry);
         pos = &pos[(entry >> 12) | (entry & 0x8)];
 
@@ -822,6 +856,8 @@ int main() {
         uint32_t* tmpPos = (uint32_t*)pos;
 
         for (int i = 1; i <= THREAD_COUNT; ++i) {
+            logMutex[i - 1].lock();
+
             uint32_t* start = tmpPos;
             uint32_t* end = (i == THREAD_COUNT) ? (uint32_t*) &pos[fileSize - 8] : &tmpPos[arrSize];
 
@@ -833,9 +869,11 @@ int main() {
         }
 
         // Join all threads to ensure they complete before exiting
-        for (auto& thread : threads) {
-            if (thread.joinable()) {
-                thread.join();
+        for (int i = 0; i < threads.size(); ++i) {
+            logMutex[i].unlock();
+
+            if (threads[i].joinable()) {
+                threads[i].join();
             }
         }
     }

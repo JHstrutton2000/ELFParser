@@ -129,6 +129,10 @@
   <ItemGroup>
     <ClCompile Include="PS2ELFParser.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Blocks.hpp" />
+    <ClInclude Include="Header.hpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

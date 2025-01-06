@@ -85,7 +85,11 @@ blockResult parseBlocks(uint32_t* curInstruction, std::vector<Block>blocks) {
                 result.title += ss.str();
                 break;
             case BlockType::base:
-                result.title += std::to_string(instructionValue);
+                if (instructionValue == 0)
+                    result.title += " zero";
+                else
+                    result.title += " base[" + std::to_string(instructionValue) + "]";
+                break;
                 break;
             case BlockType::rs:
             case BlockType::rt:
@@ -111,11 +115,13 @@ blockResult parseBlocks(uint32_t* curInstruction, std::vector<Block>blocks) {
                     result.title += " 0x" + ss.str();
                 }
                 break;
+            case BlockType::hint:
+                result.title += " " + std::to_string(instructionValue);
+                break;
             case BlockType::special:
             case BlockType::stype:
             case BlockType::code:
             case BlockType::instIndex:
-            case BlockType::hint:
             case BlockType::mmi:
             case BlockType::reg:
             default:
